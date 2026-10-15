@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Royal Casino</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♠</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="bg"></div>
+
+  <!-- ============ LOGIN / REGISTRO ============ -->
+  <section id="view-auth" class="view">
+    <div class="auth-card">
+      <div class="logo big"><span class="logo-mark">♠</span>ROYAL<b>CASINO</b></div>
+      <p class="tagline">Póker · Blackjack · Ruleta — con tus amigos</p>
+      <div class="tabs">
+        <button class="tab active" data-tab="login" type="button">Iniciar sesión</button>
+        <button class="tab" data-tab="register" type="button">Crear cuenta</button>
+      </div>
+      <form id="auth-form" autocomplete="on">
+        <label>Usuario<input id="auth-user" autocomplete="username" maxlength="16" required></label>
+        <label>Contraseña<input id="auth-pass" type="password" autocomplete="current-password" required></label>
+        <label id="pass2-wrap" class="hidden">Repite la contraseña<input id="auth-pass2" type="password" autocomplete="new-password"></label>
+        <div id="auth-error" class="form-error"></div>
+        <button class="btn gold block" id="auth-submit">Entrar</button>
+        <p class="hint" id="auth-hint">¿No tienes cuenta? Crea una y recibe <b>1.000 fichas</b> gratis.</p>
+      </form>
+    </div>
+    <div class="auth-cards" aria-hidden="true">
+      <div class="float-card c1">A<span>♠</span></div>
+      <div class="float-card c2 red">K<span>♥</span></div>
+      <div class="float-card c3 red">Q<span>♦</span></div>
+      <div class="float-card c4">J<span>♣</span></div>
+    </div>
+  </section>
+
+  <!-- ============ BARRA SUPERIOR ============ -->
+  <header id="topbar" class="hidden">
+    <div class="logo" id="logo-home"><span class="logo-mark">♠</span>ROYAL<b>CASINO</b></div>
+    <nav class="nav">
+      <button class="nav-btn" data-nav="lobby">Lobby</button>
+      <button class="nav-btn" data-nav="roulette">Ruleta</button>
+    </nav>
+    <div class="top-right">
+      <button id="bonus-btn" class="btn green small hidden">+500 gratis</button>
+      <div class="wallet" title="Tus fichas"><span class="chip-ico"></span><span id="my-chips">0</span></div>
+      <div class="user"><span class="avatar" id="my-avatar"></span><span id="my-name"></span></div>
+      <button id="logout-btn" class="btn ghost small">Salir</button>
+    </div>
+  </header>
+
+  <!-- ============ LOBBY ============ -->
+  <section id="view-lobby" class="view hidden">
+    <div class="lobby-main">
+      <div class="games">
+        <div class="game-tile t-poker">
+          <div class="gt-art"><span>A♠</span><span class="r">A♥</span></div>
+          <h3>Texas Hold'em</h3>
+          <p>3–10 jugadores · Ciegas 10/20</p>
+          <button class="btn gold" data-create="poker">Crear mesa</button>
+        </div>
+        <div class="game-tile t-bj">
+          <div class="gt-art"><span>21</span></div>
+          <h3>Blackjack</h3>
+          <p>1–7 jugadores · Paga 3:2</p>
+          <button class="btn gold" data-create="blackjack">Crear mesa</button>
+        </div>
+        <div class="game-tile t-rl">
+          <div class="gt-art"><span class="rl-mini"></span></div>
+          <h3>Ruleta europea</h3>
+          <p>Pleno paga 35 a 1</p>
+          <button class="btn gold" data-nav="roulette">Jugar</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Mesas abiertas</h2>
+          <div class="filters">
+            <button class="chip-filter active" data-filter="all">Todas</button>
+            <button class="chip-filter" data-filter="poker">Póker</button>
+            <button class="chip-filter" data-filter="blackjack">Blackjack</button>
+          </div>
+        </div>
+        <div id="room-list" class="room-list"></div>
+      </div>
+    </div>
+    <aside class="lobby-side">
+      <div class="panel">
+        <div class="panel-head"><h2>Ranking</h2><span class="online"><i></i><span id="online-count">0</span> conectados</span></div>
+        <ol id="leaderboard" class="leaderboard"></ol>
+      </div>
+      <div class="panel chat-panel">
+        <div class="panel-head"><h2>Chat general</h2></div>
+        <div class="chat-msgs" id="global-chat"></div>
+        <form class="chat-form" data-scope="global"><input maxlength="200" placeholder="Escribe un mensaje…"><button class="btn gold small">Enviar</button></form>
+      </div>
+    </aside>
+  </section>
+
+  <!-- ============ MESA (póker / blackjack) ============ -->
+  <section id="view-room" class="view hidden">
+    <div class="room-main">
+      <div class="room-head">
+        <button id="leave-room" class="btn ghost small">← Salir</button>
+        <div class="room-title"><h2 id="room-title"></h2><span id="room-sub"></span></div>
+        <div id="room-controls"></div>
+      </div>
+      <div id="table-wrap"></div>
+      <div id="action-bar"></div>
+    </div>
+    <aside class="room-side panel chat-panel">
+      <div class="panel-head"><h2>Chat de la mesa</h2></div>
+      <div class="chat-msgs" id="room-chat"></div>
+      <form class="chat-form" data-scope="room"><input maxlength="200" placeholder="Escribe un mensaje…"><button class="btn gold small">Enviar</button></form>
+    </aside>
+  </section>
+
+  <!-- ============ RULETA ============ -->
+  <section id="view-roulette" class="view hidden">
+    <div class="roulette-layout">
+      <div class="wheel-box">
+        <canvas id="wheel" width="560" height="560"></canvas>
+        <div class="last-numbers"><span>Últimos:</span><div id="last-numbers"></div></div>
+      </div>
+      <div class="rl-right">
+        <div id="rl-board" class="rl-board"></div>
+        <div class="rl-controls">
+          <div class="chip-select" id="chip-select"></div>
+          <div class="rl-total">Apuesta: <b id="rl-total">0</b></div>
+        </div>
+        <div class="rl-buttons">
+          <button class="btn ghost" id="rl-clear">Borrar</button>
+          <button class="btn ghost" id="rl-repeat">Repetir</button>
+          <button class="btn gold big" id="rl-spin">GIRAR</button>
+        </div>
+        <p class="hint">Clic en el tablero para poner fichas · clic derecho para quitarlas</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MODAL CREAR MESA ============ -->
+  <div id="modal" class="modal hidden">
+    <form class="modal-card" id="create-form">
+      <h2>Crear mesa</h2>
+      <div class="seg" id="create-game">
+        <button type="button" data-game="poker" class="active">Póker</button>
+        <button type="button" data-game="blackjack">Blackjack</button>
+      </div>
+      <label>Nombre de la mesa<input id="create-name" maxlength="30" placeholder="Mesa de…"></label>
+      <label>Máximo de jugadores: <b id="create-max-val">10</b><input type="range" id="create-max" min="3" max="10" value="10"></label>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="create-cancel">Cancelar</button>
+        <button class="btn gold">Crear</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="overlay" class="result-overlay"></div>
+  <div id="toasts"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+  <script src="poker-ui.js"></script>
+  <script src="blackjack-ui.js"></script>
+  <script src="roulette-ui.js"></script>
+</body>
+</html>
