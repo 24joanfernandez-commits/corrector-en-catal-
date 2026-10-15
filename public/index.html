@@ -43,6 +43,8 @@
     <nav class="nav">
       <button class="nav-btn" data-nav="lobby">Lobby</button>
       <button class="nav-btn" data-nav="roulette">Ruleta</button>
+      <button class="nav-btn" data-nav="football">⚽ Fútbol</button>
+      <button class="nav-btn" data-nav="ranking">🏆 Ranking</button>
       <button class="nav-btn admin-nav hidden" data-nav="admin">🛡️ Admin</button>
     </nav>
     <div class="top-right">
@@ -74,6 +76,12 @@
           <h3>Ruleta europea</h3>
           <p>Pleno paga 35 a 1</p>
           <button class="btn gold" data-nav="roulette">Jugar</button>
+        </div>
+        <div class="game-tile t-fb">
+          <div class="gt-art"><span class="ball-art">⚽</span></div>
+          <h3>Apuestas de fútbol</h3>
+          <p>Partido animado · cuotas reales</p>
+          <button class="btn gold" data-nav="football">Apostar</button>
         </div>
       </div>
       <div class="panel">
@@ -142,6 +150,63 @@
     </div>
   </section>
 
+  <!-- ============ FÚTBOL ============ -->
+  <section id="view-football" class="view hidden">
+    <div class="fb-layout">
+      <div class="fb-main">
+        <div class="scoreboard">
+          <div class="sb-team" id="sb-home"></div>
+          <div class="sb-center">
+            <div class="sb-score"><span id="sb-hg">-</span><i>:</i><span id="sb-ag">-</span></div>
+            <div class="sb-clock" id="sb-clock">Previa</div>
+          </div>
+          <div class="sb-team away" id="sb-away"></div>
+        </div>
+        <div class="pitch-wrap">
+          <canvas id="pitch" width="900" height="560"></canvas>
+          <div id="goal-flash" class="goal-flash"></div>
+        </div>
+        <div class="fb-feed" id="fb-feed"><div class="fb-ev info">Elige un partido, apuesta y mira cómo se juega.</div></div>
+      </div>
+      <aside class="fb-side">
+        <div class="panel">
+          <div class="panel-head"><h2>Tu apuesta</h2></div>
+          <div class="fb-teams">
+            <label>Local<select id="fb-home"></select></label>
+            <button class="fb-swap" id="fb-swap" title="Cambiar local y visitante">⇄</button>
+            <label>Visitante<select id="fb-away"></select></label>
+          </div>
+          <div class="fb-strength" id="fb-strength"></div>
+          <div class="fb-prob" id="fb-prob"></div>
+          <div class="fb-picks" id="fb-picks"></div>
+          <label class="fb-amount">Fichas a apostar<input type="number" id="fb-amount" min="1" value="100"></label>
+          <div class="fb-quick">
+            <button data-q="50">50</button><button data-q="100">100</button><button data-q="500">500</button><button data-q="1000">1.000</button><button data-q="all">Todo</button>
+          </div>
+          <div class="fb-win">Si aciertas ganas <b id="fb-win">0</b> fichas</div>
+          <button class="btn gold block big" id="fb-bet">⚽ Apostar y jugar</button>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Partidos destacados</h2><button class="btn ghost small" id="fb-refresh">↻ Otros</button></div>
+          <div class="fx-head"><span></span><span class="fx-odds"><i>1</i><i>X</i><i>2</i></span><span></span></div>
+          <div id="fb-fixtures"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ RANKING ============ -->
+  <section id="view-ranking" class="view hidden">
+    <div class="rk-wrap">
+      <div class="rk-head">
+        <h1>🏆 Los más ricos del casino</h1>
+        <p class="muted" id="rk-sub"></p>
+      </div>
+      <div class="podium" id="podium"></div>
+      <div class="panel"><ol class="rk-list" id="rk-list"></ol></div>
+    </div>
+  </section>
+
   <!-- ============ PANEL DE ADMIN ============ -->
   <section id="view-admin" class="view hidden">
     <div class="admin-wrap">
@@ -192,5 +257,6 @@
   <script src="poker-ui.js"></script>
   <script src="blackjack-ui.js"></script>
   <script src="roulette-ui.js"></script>
+  <script src="football-ui.js"></script>
 </body>
 </html>

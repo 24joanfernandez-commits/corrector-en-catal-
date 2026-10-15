@@ -21,6 +21,65 @@ try {
   data.sessions = data.sessions || {};
 } catch {}
 
+// ---------- Guardado en la nube (Upstash Redis, gratis) ----------
+// Si en Render existen estas dos variables, las cuentas se guardan en la nube
+// y no se pierden aunque el servidor se duerma o se reinicie.
+const REDIS_URL = (process.env.UPSTASH_REDIS_REST_URL || '').replace(/\/$/, '');
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
+const REDIS_KEY = 'vilacasino:db';
+const cloud = !!(REDIS_URL && REDIS_TOKEN);
+
+async function redis(cmd) {
+  const res = await fetch(REDIS_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(cmd),
+  });
+  const j = await res.json();
+  if (j.error) throw new Error(j.error);
+  return j.result;
+}
+
+// Carga las cuentas antes de arrancar. Si la nube falla, reintenta: nunca
+// arranca vacío para no sobrescribir las cuentas guardadas.
+async function init() {
+  if (!cloud) { console.log('  Guardado: archivo local data/db.json'); return; }
+  for (let i = 1; i <= 5; i++) {
+    try {
+      const raw = await redis(['GET', REDIS_KEY]);
+      if (raw) {
+        data = JSON.parse(raw);
+        data.users = data.users || {};
+        data.sessions = data.sessions || {};
+      }
+      console.log(`  Guardado: nube (Upstash) · ${Object.keys(data.users).length} cuentas cargadas`);
+      return;
+    } catch (e) {
+      console.log(`  Error cargando de la nube (intento ${i}/5): ${e.message}`);
+      await new Promise((r) => setTimeout(r, 2000 * i));
+    }
+  }
+  throw new Error('No se pudo cargar la base de datos de la nube');
+}
+
+let cloudTimer = null, cloudDirty = false, cloudBusy = null;
+async function pushCloud() {
+  if (!cloud) return;
+  cloudDirty = false;
+  try { await redis(['SET', REDIS_KEY, JSON.stringify(data)]); }
+  catch (e) { cloudDirty = true; console.log('  Error guardando en la nube:', e.message); }
+}
+function scheduleCloud() {
+  if (!cloud) return;
+  cloudDirty = true;
+  if (cloudTimer) return;
+  // Como mucho una escritura cada 5 s para no gastar el plan gratuito
+  cloudTimer = setTimeout(() => {
+    cloudTimer = null;
+    cloudBusy = pushCloud().finally(() => { cloudBusy = null; if (cloudDirty) scheduleCloud(); });
+  }, 5000);
+}
+
 let saveTimer = null;
 function writeNow() {
   fs.mkdirSync(DIR, { recursive: true });
@@ -29,12 +88,16 @@ function writeNow() {
   fs.renameSync(tmp, FILE);
 }
 function save() {
+  scheduleCloud();
   if (saveTimer) return;
   saveTimer = setTimeout(() => { saveTimer = null; writeNow(); }, 500);
 }
-function flush() {
+async function flush() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-  writeNow();
+  try { writeNow(); } catch {}
+  if (cloudTimer) { clearTimeout(cloudTimer); cloudTimer = null; }
+  if (cloudBusy) await cloudBusy;
+  if (cloud) await pushCloud();
 }
 
 const key = (n) => String(n).toLowerCase();
@@ -180,6 +243,6 @@ function leaderboard(n = 10) {
 }
 
 module.exports = {
-  register, login, logout, userFromToken, getChips, addChips, claimBonus, leaderboard, flush, BONUS_CHIPS,
+  init, register, login, logout, userFromToken, getChips, addChips, claimBonus, leaderboard, flush, BONUS_CHIPS,
   isAdmin, isBanned, exists, adminNames, listUsers, setChips, ban, unban, deleteUser,
 };

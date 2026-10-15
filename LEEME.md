@@ -42,3 +42,15 @@ Las fichas son virtuales, así que no se juega con dinero real.
 
 Las cuentas y las fichas se guardan en `data/db.json`. Si borras ese archivo, se reinicia todo.
 Para usar otro puerto: `PORT=4000 node server.js`.
+
+## Guardar las cuentas para siempre (Render gratis)
+
+En el plan gratis de Render se borra todo cuando el servidor se duerme. Para que las cuentas y las fichas
+se guarden, conecta una base de datos gratuita de **Upstash**:
+
+1. Entra en https://upstash.com e inicia sesión con GitHub.
+2. Crea una base de datos **Redis** (plan Free, la región más cercana).
+3. En la base de datos, busca la sección **REST API** y copia `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN`.
+4. En Render → tu servicio → **Environment** → añade esas dos variables con sus valores → **Save**.
+
+Al reiniciarse, en los logs de Render tiene que salir: `Guardado: nube (Upstash)`.

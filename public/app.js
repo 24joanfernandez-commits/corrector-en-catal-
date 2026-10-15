@@ -39,11 +39,13 @@ function avatarHTML(name, cls = '') {
 // ---------- Vistas ----------
 function show(view) {
   App.view = view;
-  for (const v of ['auth', 'lobby', 'room', 'roulette', 'admin']) $('#view-' + v).classList.toggle('hidden', v !== view);
+  for (const v of ['auth', 'lobby', 'room', 'roulette', 'admin', 'football', 'ranking']) $('#view-' + v).classList.toggle('hidden', v !== view);
   $('#topbar').classList.toggle('hidden', view === 'auth');
   $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.nav === view));
   if (view === 'roulette' && typeof Roulette !== 'undefined') Roulette.onShow();
   if (view === 'admin') Admin.load();
+  if (view === 'football' && typeof Football !== 'undefined') Football.onShow();
+  if (view === 'ranking') Ranking.load();
 }
 
 function toast(msg, kind = 'error') {
@@ -272,7 +274,8 @@ function connect(token) {
     $$('.admin-nav').forEach((b) => b.classList.toggle('hidden', !me.admin));
     if (!me.admin && App.view === 'admin') show('lobby');
     paintMe();
-    if (!(typeof Roulette !== 'undefined' && Roulette.spinning)) setChips(me.chips, changed);
+    const busy = (typeof Roulette !== 'undefined' && Roulette.spinning) || (typeof Football !== 'undefined' && Football.playing);
+    if (!busy) setChips(me.chips, changed);
   });
 
   socket.on('lobby', (data) => {
@@ -330,9 +333,8 @@ $('#bonus-btn').addEventListener('click', () => {
 // ---------- Navegación ----------
 $$('[data-nav]').forEach((b) => b.addEventListener('click', () => {
   const to = b.dataset.nav;
-  if (App.room && to !== 'room') {
-    if (to === 'lobby') { show('lobby'); return; }
-    toast('Sal de la mesa para jugar a la ruleta');
+  if (App.room && (to === 'roulette' || to === 'football')) {
+    toast('Sal de la mesa para jugar a esto');
     return;
   }
   show(to);
@@ -448,6 +450,37 @@ $$('.chat-form').forEach((f) => f.addEventListener('submit', (e) => {
   App.socket.emit('chat:send', { scope: f.dataset.scope, text });
   inp.value = '';
 }));
+
+// ---------- Ranking ----------
+const Ranking = {
+  load() {
+    if (!App.socket) return;
+    App.socket.emit('leaderboard:full', (r) => {
+      App.lobby.admins = r.admins;
+      this.render(r);
+    });
+  },
+  render({ top, total }) {
+    $('#rk-sub').textContent = `${total} jugadores · se actualiza en directo`;
+    const pod = [top[1], top[0], top[2]];
+    const cls = ['second', 'first', 'third'];
+    const medal = ['🥈', '🥇', '🥉'];
+    $('#podium').innerHTML = pod.map((u, i) => u ? `<div class="pod ${cls[i]} ${u.name === App.me.name ? 'me' : ''}">
+        ${i === 1 ? '<div class="crown">👑</div>' : ''}
+        ${avatarHTML(u.name, 'xl')}
+        <div class="pod-name">${nameHTML(u.name)}</div>
+        <div class="pod-tower">${chipTower(u.chips, '', 4, true)}</div>
+        <div class="pod-chips"><span class="chip-ico sm"></span>${fmt(u.chips)}</div>
+        <div class="pod-block"><span>${medal[i]}</span></div>
+      </div>` : '<div class="pod empty"></div>').join('');
+    const max = top[0] ? top[0].chips || 1 : 1;
+    $('#rk-list').innerHTML = top.slice(3).map((u, i) => `<li class="${u.name === App.me.name ? 'me' : ''}">
+        <span class="rk-pos">${i + 4}</span>${avatarHTML(u.name, 'sm')}
+        <span class="rk-name">${nameHTML(u.name)}</span>
+        <span class="rk-bar"><i style="width:${Math.max(2, (u.chips / max) * 100)}%"></i></span>
+        <span class="rk-chips">${fmt(u.chips)}</span></li>`).join('') || '<li class="muted" style="justify-content:center">¡Invita a más amigos para llenar el ranking!</li>';
+  },
+};
 
 // ---------- Panel de administración ----------
 function fmtDate(ts) {

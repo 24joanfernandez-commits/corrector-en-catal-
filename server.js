@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 
 const db = require('./db');
 const roulette = require('./games/roulette');
+const football = require('./games/football');
 const { PokerGame } = require('./games/poker');
 const { BlackjackGame } = require('./games/blackjack');
 
@@ -263,6 +264,29 @@ io.on('connection', (socket) => {
     setTimeout(() => { sendMe(name); broadcastLobby(); }, 8000);
   });
 
+  // ---------- Fútbol ----------
+  socket.on('football:teams', (cb) => reply(cb)({ teams: football.TEAMS, fixtures: football.fixtures(6) }));
+  socket.on('football:fixtures', (cb) => reply(cb)({ fixtures: football.fixtures(6) }));
+  socket.on('football:info', (data, cb) => {
+    const r = football.info(String(data && data.home), String(data && data.away));
+    reply(cb)(r || { error: 'Elige dos equipos distintos' });
+  });
+  let footballBusyUntil = 0;
+  socket.on('football:bet', (data, cb) => {
+    cb = reply(cb);
+    if (userRoom.has(name)) return cb({ error: 'Sal de tu mesa para apostar en el fútbol' });
+    if (Date.now() < footballBusyUntil) return cb({ error: 'Espera a que termine el partido' });
+    const r = football.play(data || {}, db.getChips(name));
+    if (r.error) return cb(r);
+    const chips = db.addChips(name, r.payout - r.amount);
+    footballBusyUntil = Date.now() + 20000;
+    cb({ ...r, chips });
+    setTimeout(() => { sendMe(name); broadcastLobby(); }, 32000);
+  });
+
+  // ---------- Ranking completo ----------
+  socket.on('leaderboard:full', (cb) => reply(cb)({ top: db.leaderboard(50), admins: db.adminNames(), total: db.listUsers().length }));
+
   socket.on('bonus:claim', (cb) => {
     cb = reply(cb);
     if (userRoom.has(name)) return cb({ error: 'Sal de la mesa para pedir el bono' });
@@ -345,7 +369,7 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+db.init().then(() => server.listen(PORT, '0.0.0.0', () => {
   const ips = [];
   for (const list of Object.values(os.networkInterfaces())) {
     for (const i of list || []) if (i.family === 'IPv4' && !i.internal) ips.push(i.address);
@@ -354,8 +378,14 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  En este ordenador:   http://localhost:${PORT}`);
   for (const ip of ips) console.log(`  Para tus amigos:     http://${ip}:${PORT}`);
   console.log('\n  (Pulsa Ctrl+C para cerrar el servidor)\n');
-});
+})).catch((e) => { console.error(e.message); process.exit(1); });
 
-function shutdown() { db.flush(); process.exit(0); }
+let closing = false;
+function shutdown() {
+  if (closing) return;
+  closing = true;
+  db.flush().finally(() => process.exit(0));
+  setTimeout(() => process.exit(0), 8000);
+}
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
