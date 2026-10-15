@@ -24,6 +24,7 @@ const PokerUI = {
       seatsHTML += `<div class="seat ${cls}" style="left:${x}%;top:${y}%">
         <div class="seat-cards">${cards}</div>
         <div class="seat-box">
+          <span class="seat-stack">${chipTower(s.chips, 'sm', 3, true)}</span>
           ${avatarHTML(s.name)}
           <div class="seat-info"><b>${nameHTML(s.name)}</b><span class="seat-chips"><span class="chip-ico sm"></span>${fmt(s.chips)}</span></div>
           ${s.isDealer ? '<span class="dealer-btn">D</span>' : ''}
@@ -59,7 +60,7 @@ const PokerUI = {
           <div class="deck" id="deck"></div>
           <div class="center">
             <div class="board">${board}</div>
-            <div class="pot ${g.potTotal ? '' : 'hidden'}">${this.chipStack(g.pot || g.potTotal)}<span>Bote: <b>${fmt(g.potTotal)}</b></span></div>
+            <div class="pot ${g.potTotal ? '' : 'hidden'}">${this.chipStack(g.potTotal, 'big')}<span>Bote: <b>${fmt(g.potTotal)}</b></span></div>
             ${centerMsg ? `<div class="center-msg ${showdown ? 'win' : ''}">${centerMsg}</div>` : ''}
           </div>
         </div>
@@ -77,14 +78,7 @@ const PokerUI = {
     this.renderActions(g);
   },
 
-  chipStack(amount) {
-    const colors = [[1000, 'c-gold'], [500, 'c-purple'], [100, 'c-black'], [25, 'c-green'], [5, 'c-red'], [1, 'c-white']];
-    let left = amount, out = '', count = 0;
-    for (const [v, c] of colors) {
-      while (left >= v && count < 6) { out += `<i class="pchip ${c}" style="--n:${count}"></i>`; left -= v; count++; }
-    }
-    return `<span class="pstack">${out}</span>`;
-  },
+  chipStack(amount, size) { return chipTower(amount, size); },
 
   renderActions(g) {
     const bar = $('#action-bar');

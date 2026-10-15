@@ -11,17 +11,25 @@ const BlackjackUI = {
 
     const seatsHTML = g.seats.map((s, i) => {
       const t = n === 1 ? 0.5 : i / (n - 1);
-      const th = Math.PI * (0.12 + 0.76 * t);
-      const x = 50 + 41 * Math.cos(th), y = 30 + 52 * Math.sin(th);
+      const th = Math.PI * (0.14 + 0.72 * t);
+      // y = posición del borde inferior del asiento (crece hacia arriba, nunca se sale del tapete)
+      const x = 50 + 40 * Math.cos(th), y = 50 + 43 * Math.sin(th);
       const cards = s.hand.map((c, k) => Cards.html(c, `bj${g.roundId}-${s.name}-${k}`)).join('');
       const res = s.result ? `<div class="bj-result ${s.result.outcome}">${outcomeLabel[s.result.outcome]}${s.result.net ? ` ${s.result.net > 0 ? '+' : ''}${fmt(s.result.net)}` : ''}</div>` : '';
       const status = s.status && statusLabel[s.status] ? `<div class="bj-status ${s.status}">${statusLabel[s.status]}</div>` : '';
       return `<div class="bj-seat ${i === g.you ? 'me' : ''} ${s.isTurn ? 'turn' : ''} ${s.left ? 'left' : ''}" style="left:${x}%;top:${y}%">
-        <div class="bj-cards">${cards}</div>
-        ${s.value ? `<div class="bj-value ${s.status === 'bust' ? 'bust' : ''}">${s.soft && s.value < 21 ? 'Blanda ' : ''}${s.value}</div>` : ''}
-        ${status}${res}
-        <div class="bj-bet ${s.bet ? '' : 'empty'}">${s.bet ? PokerUI.chipStack(s.bet) + `<span>${fmt(s.bet)}</span>` : ''}${s.ready && g.phase === 'betting' ? '<em class="ready">✓ Listo</em>' : ''}</div>
+        <div class="bj-hand">
+          <div class="bj-cards">${cards}</div>
+          ${s.value ? `<div class="bj-value ${s.status === 'bust' ? 'bust' : ''}">${s.soft && s.value < 21 ? s.value - 10 + '/' : ''}${s.value}</div>` : ''}
+          <div class="bj-badges">${status}${res}</div>
+        </div>
+        <div class="bj-spot ${s.bet ? 'has' : ''}">
+          ${s.bet ? chipTower(s.bet) : ''}
+          ${s.bet ? `<span class="bj-amount">${fmt(s.bet)}</span>` : ''}
+          ${s.ready && g.phase === 'betting' ? '<em class="ready">✓ Listo</em>' : ''}
+        </div>
         <div class="seat-box">
+          <span class="seat-stack">${chipTower(s.chips, 'sm', 3, true)}</span>
           ${avatarHTML(s.name)}
           <div class="seat-info"><b>${nameHTML(s.name)}</b><span class="seat-chips"><span class="chip-ico sm"></span>${fmt(s.chips)}</span></div>
           ${s.isTurn && g.deadline ? `<div class="timer-bar" data-deadline="${g.deadline}" data-total="${g.turnMs}"></div>` : ''}
@@ -45,9 +53,9 @@ const BlackjackUI = {
             <div class="bj-dealer-label">BANCA</div>
             <div class="bj-cards dealer">${dealerCards}</div>
             ${g.dealer.value ? `<div class="bj-value ${g.dealer.value > 21 ? 'bust' : ''}">${g.dealer.value}</div>` : ''}
+            ${msg ? `<div class="bj-msg">${msg}</div>` : ''}
           </div>
           <div class="bj-arc-text">BLACKJACK PAGA 3 A 2 · LA BANCA SE PLANTA EN 17</div>
-          ${msg ? `<div class="bj-msg">${msg}</div>` : ''}
         </div>
         ${seatsHTML}
       </div>`;

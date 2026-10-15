@@ -96,6 +96,38 @@ const Sound = {
   },
 };
 
+// ---------- Torres de fichas 3D ----------
+// Desglosa la cantidad en fichas de casino y las apila en columnas por color,
+// como en una mesa real: cuanto más dinero, más altas y más torres.
+const CHIP_DENOMS = [
+  [100000, '#ec4899', '#fff'], [10000, '#f97316', '#fff'], [1000, '#d4a017', '#fff3c4'],
+  [500, '#7c3aed', '#fff'], [100, '#1d1f25', '#e5e7eb'], [25, '#15994f', '#fff'],
+  [5, '#d0102b', '#fff'], [1, '#e5e7eb', '#4b5563'],
+];
+const PER_COLUMN = 10, MAX_COLUMNS = 6;
+// tall = usar fichas pequeñas para que la torre crezca con la cantidad (montón del jugador)
+function chipTower(amount, size = '', maxCols = MAX_COLUMNS, tall = false) {
+  let left = Math.max(0, Math.floor(amount));
+  const cols = [];
+  const denoms = tall ? CHIP_DENOMS.filter(([v]) => v <= Math.max(1, left / 8)) : CHIP_DENOMS;
+  for (const [v, c, s] of denoms) {
+    let n = Math.floor(left / v);
+    left -= n * v;
+    while (n > 0 && cols.length < maxCols) {
+      const k = Math.min(n, PER_COLUMN);
+      cols.push({ k, c, s });
+      n -= k;
+    }
+  }
+  if (!cols.length) return '';
+  const html = cols.map(({ k, c, s }) => {
+    let chips = '';
+    for (let i = 0; i < k; i++) chips += `<i class="tc" style="--i:${i}"></i>`;
+    return `<span class="tcol" style="--c:${c};--s:${s};--h:${k}">${chips}</span>`;
+  }).join('');
+  return `<span class="tower ${size}">${html}</span>`;
+}
+
 // ---------- Cartas con animación de reparto ----------
 const SUIT = { s: '♠', h: '♥', d: '♦', c: '♣' };
 const Cards = {
