@@ -23,6 +23,7 @@
         <label>Usuario<input id="auth-user" autocomplete="username" maxlength="16" required></label>
         <label>Contraseña<input id="auth-pass" type="password" autocomplete="current-password" required></label>
         <label id="pass2-wrap" class="hidden">Repite la contraseña<input id="auth-pass2" type="password" autocomplete="new-password"></label>
+        <label class="admin-label">🔒 Contraseña admin <span>(opcional)</span><input id="auth-admin" type="password" autocomplete="off" placeholder="Déjalo vacío si no eres admin"></label>
         <div id="auth-error" class="form-error"></div>
         <button class="btn gold block" id="auth-submit">Entrar</button>
         <p class="hint" id="auth-hint">¿No tienes cuenta? Crea una y recibe <b>1.000 fichas</b> gratis.</p>
@@ -42,6 +43,7 @@
     <nav class="nav">
       <button class="nav-btn" data-nav="lobby">Lobby</button>
       <button class="nav-btn" data-nav="roulette">Ruleta</button>
+      <button class="nav-btn admin-nav hidden" data-nav="admin">🛡️ Admin</button>
     </nav>
     <div class="top-right">
       <button id="bonus-btn" class="btn green small hidden">+500 gratis</button>
@@ -136,6 +138,31 @@
           <button class="btn gold big" id="rl-spin">GIRAR</button>
         </div>
         <p class="hint">Clic en el tablero para poner fichas · clic derecho para quitarlas</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PANEL DE ADMIN ============ -->
+  <section id="view-admin" class="view hidden">
+    <div class="admin-wrap">
+      <div class="admin-head">
+        <div>
+          <h1>🛡️ Panel de administración</h1>
+          <p class="muted">Cambia fichas, banea temporalmente o elimina cuentas.</p>
+        </div>
+        <div class="admin-stats" id="admin-stats"></div>
+      </div>
+      <div class="panel">
+        <div class="admin-tools">
+          <input id="admin-search" placeholder="Buscar usuario…" autocomplete="off">
+          <button class="btn ghost small" id="admin-refresh">↻ Actualizar</button>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>Usuario</th><th>Estado</th><th>Fichas</th><th>Banear</th><th></th></tr></thead>
+            <tbody id="admin-users"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>

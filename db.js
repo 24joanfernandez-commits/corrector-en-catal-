@@ -9,6 +9,11 @@ const START_CHIPS = 1000;
 const BONUS_CHIPS = 500;
 const BONUS_COOLDOWN = 3 * 60 * 1000;
 
+// Contraseña de administrador: solo se guarda su hash (nunca el texto).
+// En Render se puede cambiar poniendo la variable de entorno ADMIN_PASSWORD.
+const ADMIN_SALT = 'vilacasino-admin-v1';
+const ADMIN_HASH = '995b511339a799d00b0611384a39d67968b00862ba01ee38c66b09a2b86cdefaefdd544e3f3307ed15ab192d4637efda3f9dcfca4fca3c37d2c0322bb412807e';
+
 let data = { users: {}, sessions: {} };
 try {
   data = JSON.parse(fs.readFileSync(FILE, 'utf8'));
@@ -42,26 +47,49 @@ function createSession(name) {
   return token;
 }
 
-function register(username, password) {
+function checkAdminPassword(pw) {
+  pw = String(pw || '');
+  if (process.env.ADMIN_PASSWORD) {
+    const a = Buffer.from(hash(pw, ADMIN_SALT), 'hex');
+    const b = Buffer.from(hash(process.env.ADMIN_PASSWORD, ADMIN_SALT), 'hex');
+    return crypto.timingSafeEqual(a, b);
+  }
+  return crypto.timingSafeEqual(Buffer.from(hash(pw, ADMIN_SALT), 'hex'), Buffer.from(ADMIN_HASH, 'hex'));
+}
+
+function bannedUntil(u) {
+  return u && u.bannedUntil && u.bannedUntil > Date.now() ? u.bannedUntil : 0;
+}
+
+function register(username, password, adminPassword) {
   username = String(username || '').trim();
   password = String(password || '');
+  const wantsAdmin = !!adminPassword;
+  if (wantsAdmin && !checkAdminPassword(adminPassword)) return { error: 'Contraseña de admin incorrecta', adminFail: true };
   if (!/^[A-Za-z0-9_]{3,16}$/.test(username)) return { error: 'El usuario debe tener de 3 a 16 letras, números o _' };
   if (password.length < 4) return { error: 'La contraseña debe tener al menos 4 caracteres' };
   if (data.users[key(username)]) return { error: 'Ese nombre de usuario ya existe' };
   const salt = crypto.randomBytes(16).toString('hex');
   data.users[key(username)] = {
     name: username, salt, hash: hash(password, salt),
-    chips: START_CHIPS, created: Date.now(), lastBonus: 0,
+    chips: START_CHIPS, created: Date.now(), lastBonus: 0, isAdmin: wantsAdmin,
   };
   save();
   return { token: createSession(username), name: username };
 }
 
-function login(username, password) {
+function login(username, password, adminPassword) {
   const u = data.users[key(String(username || '').trim())];
   if (!u) return { error: 'Usuario o contraseña incorrectos' };
   const given = Buffer.from(hash(String(password || ''), u.salt), 'hex');
   if (!crypto.timingSafeEqual(given, Buffer.from(u.hash, 'hex'))) return { error: 'Usuario o contraseña incorrectos' };
+  if (adminPassword) {
+    if (!checkAdminPassword(adminPassword)) return { error: 'Contraseña de admin incorrecta', adminFail: true };
+    u.isAdmin = true;
+    save();
+  }
+  const until = bannedUntil(u);
+  if (until && !u.isAdmin) return { error: 'Tu cuenta está baneada', bannedUntil: until };
   return { token: createSession(u.name), name: u.name };
 }
 
@@ -97,6 +125,53 @@ function claimBonus(name) {
   return { chips: u.chips };
 }
 
+// ---------- Administración ----------
+function isAdmin(name) { const u = data.users[key(name)]; return !!(u && u.isAdmin); }
+function isBanned(name) { const u = data.users[key(name)]; return u && !u.isAdmin ? bannedUntil(u) : 0; }
+function exists(name) { return !!data.users[key(name)]; }
+
+function adminNames() { return Object.values(data.users).filter((u) => u.isAdmin).map((u) => u.name); }
+
+function listUsers() {
+  return Object.values(data.users)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((u) => ({ name: u.name, chips: u.chips, isAdmin: !!u.isAdmin, bannedUntil: bannedUntil(u), created: u.created }));
+}
+
+function setChips(name, chips) {
+  const u = data.users[key(name)];
+  if (!u) return false;
+  u.chips = Math.max(0, Math.floor(chips));
+  save();
+  return true;
+}
+
+function ban(name, ms) {
+  const u = data.users[key(name)];
+  if (!u) return 0;
+  u.bannedUntil = Date.now() + ms;
+  for (const [t, k] of Object.entries(data.sessions)) if (k === key(name)) delete data.sessions[t];
+  save();
+  return u.bannedUntil;
+}
+
+function unban(name) {
+  const u = data.users[key(name)];
+  if (!u) return false;
+  u.bannedUntil = 0;
+  save();
+  return true;
+}
+
+function deleteUser(name) {
+  const k = key(name);
+  if (!data.users[k]) return false;
+  delete data.users[k];
+  for (const [t, v] of Object.entries(data.sessions)) if (v === k) delete data.sessions[t];
+  save();
+  return true;
+}
+
 function leaderboard(n = 10) {
   return Object.values(data.users)
     .sort((a, b) => b.chips - a.chips)
@@ -104,4 +179,7 @@ function leaderboard(n = 10) {
     .map((u) => ({ name: u.name, chips: u.chips }));
 }
 
-module.exports = { register, login, logout, userFromToken, getChips, addChips, claimBonus, leaderboard, flush, BONUS_CHIPS };
+module.exports = {
+  register, login, logout, userFromToken, getChips, addChips, claimBonus, leaderboard, flush, BONUS_CHIPS,
+  isAdmin, isBanned, exists, adminNames, listUsers, setChips, ban, unban, deleteUser,
+};

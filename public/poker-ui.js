@@ -25,7 +25,7 @@ const PokerUI = {
         <div class="seat-cards">${cards}</div>
         <div class="seat-box">
           ${avatarHTML(s.name)}
-          <div class="seat-info"><b>${esc(s.name)}</b><span class="seat-chips"><span class="chip-ico sm"></span>${fmt(s.chips)}</span></div>
+          <div class="seat-info"><b>${nameHTML(s.name)}</b><span class="seat-chips"><span class="chip-ico sm"></span>${fmt(s.chips)}</span></div>
           ${s.isDealer ? '<span class="dealer-btn">D</span>' : ''}
           ${s.isTurn && g.deadline ? `<div class="timer-bar" data-deadline="${g.deadline}" data-total="${g.turnMs}"></div>` : ''}
         </div>

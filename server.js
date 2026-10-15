@@ -13,17 +13,33 @@ const { BlackjackGame } = require('./games/blackjack');
 const PORT = Number(process.env.PORT) || 3000;
 
 const app = express();
+app.set('trust proxy', true);
 app.use(express.json());
+
+// Límite de intentos fallidos de contraseña de admin (5 cada 10 min por IP)
+const adminFails = new Map();
+function adminBlocked(ip) {
+  const f = adminFails.get(ip);
+  return f && f.count >= 5 && Date.now() - f.first < 10 * 60 * 1000;
+}
+function noteAdminFail(ip) {
+  const f = adminFails.get(ip);
+  if (!f || Date.now() - f.first > 10 * 60 * 1000) adminFails.set(ip, { count: 1, first: Date.now() });
+  else f.count++;
+}
+function authRoute(fn) {
+  return (req, res) => {
+    const adminPw = String(req.body.adminPassword || '');
+    if (adminPw && adminBlocked(req.ip)) return res.status(429).json({ error: 'Demasiados intentos de admin. Espera 10 minutos.' });
+    const r = fn(req.body.username, req.body.password, adminPw);
+    if (r.adminFail) noteAdminFail(req.ip);
+    res.status(r.error ? 400 : 200).json(r);
+  };
+}
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.post('/api/register', (req, res) => {
-  const r = db.register(req.body.username, req.body.password);
-  res.status(r.error ? 400 : 200).json(r);
-});
-app.post('/api/login', (req, res) => {
-  const r = db.login(req.body.username, req.body.password);
-  res.status(r.error ? 400 : 200).json(r);
-});
+app.post('/api/register', authRoute(db.register));
+app.post('/api/login', authRoute(db.login));
 app.post('/api/logout', (req, res) => {
   db.logout(String(req.body.token || ''));
   res.json({ ok: true });
@@ -42,7 +58,7 @@ const lastChat = new Map();
 let nextRoomId = 1;
 
 const toUser = (name) => io.to('user:' + name);
-const sendMe = (name) => toUser(name).emit('me', { name, chips: db.getChips(name) });
+const sendMe = (name) => toUser(name).emit('me', { name, chips: db.getChips(name), admin: db.isAdmin(name) });
 
 let lobbyTimer = null;
 function broadcastLobby() {
@@ -60,6 +76,7 @@ function lobbyData() {
     })),
     online: connections.size,
     leaderboard: db.leaderboard(10),
+    admins: db.adminNames(),
   };
 }
 
@@ -144,10 +161,22 @@ function leaveRoom(name) {
   broadcastLobby();
 }
 
+// Echa a un usuario: lo levanta de la mesa y cierra sus conexiones
+function kick(name, reason, until) {
+  leaveRoom(name);
+  clearTimeout(leaveTimers.get(name));
+  leaveTimers.delete(name);
+  toUser(name).emit('kicked', { reason, until });
+  io.in('user:' + name).disconnectSockets(true);
+  connections.delete(name);
+  broadcastLobby();
+}
+
 // ---------------- Sockets ----------------
 io.use((socket, next) => {
   const name = db.userFromToken(socket.handshake.auth && socket.handshake.auth.token);
   if (!name) return next(new Error('auth'));
+  if (db.isBanned(name)) return next(new Error('banned'));
   socket.data.name = name;
   next();
 });
@@ -160,7 +189,7 @@ io.on('connection', (socket) => {
   clearTimeout(leaveTimers.get(name));
   leaveTimers.delete(name);
 
-  socket.emit('me', { name, chips: db.getChips(name) });
+  socket.emit('me', { name, chips: db.getChips(name), admin: db.isAdmin(name) });
   socket.emit('chat:history', globalChat);
   socket.emit('lobby', lobbyData());
   broadcastLobby();
@@ -213,7 +242,7 @@ io.on('connection', (socket) => {
     const now = Date.now();
     if (now - (lastChat.get(name) || 0) < 400) return;
     lastChat.set(name, now);
-    const msg = { name, text, ts: now };
+    const msg = { name, text, ts: now, admin: db.isAdmin(name) };
     if (data.scope === 'room') {
       const room = rooms.get(userRoom.get(name));
       if (room) roomChat(room, msg);
@@ -240,6 +269,70 @@ io.on('connection', (socket) => {
     const r = db.claimBonus(name);
     if (!r.error) { sendMe(name); broadcastLobby(); }
     cb(r);
+  });
+
+  // ---------- Panel de administración ----------
+  const admin = (cb) => {
+    if (db.isAdmin(name)) return true;
+    reply(cb)({ error: 'No tienes permisos de administrador' });
+    return false;
+  };
+  const target = (data) => String((data && data.user) || '');
+
+  socket.on('admin:users', (cb) => {
+    if (!admin(cb)) return;
+    reply(cb)({
+      users: db.listUsers().map((u) => ({ ...u, online: connections.has(u.name), inRoom: userRoom.has(u.name) })),
+    });
+  });
+
+  socket.on('admin:setChips', (data, cb) => {
+    if (!admin(cb)) return;
+    cb = reply(cb);
+    const user = target(data);
+    const chips = Math.floor(Number(data && data.chips));
+    if (!db.exists(user)) return cb({ error: 'Ese usuario no existe' });
+    if (!Number.isFinite(chips) || chips < 0 || chips > 1e12) return cb({ error: 'Cantidad no válida' });
+    db.setChips(user, chips);
+    sendMe(user);
+    const room = rooms.get(userRoom.get(user));
+    if (room) room.game.ctx.update();
+    broadcastLobby();
+    cb({ ok: true });
+  });
+
+  socket.on('admin:ban', (data, cb) => {
+    if (!admin(cb)) return;
+    cb = reply(cb);
+    const user = target(data);
+    const minutes = Math.floor(Number(data && data.minutes));
+    if (!db.exists(user)) return cb({ error: 'Ese usuario no existe' });
+    if (user.toLowerCase() === name.toLowerCase()) return cb({ error: 'No puedes banearte a ti mismo' });
+    if (db.isAdmin(user)) return cb({ error: 'No puedes banear a otro admin' });
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 525600) return cb({ error: 'Duración no válida' });
+    const until = db.ban(user, minutes * 60000);
+    kick(user, 'banned', until);
+    cb({ ok: true, until });
+  });
+
+  socket.on('admin:unban', (data, cb) => {
+    if (!admin(cb)) return;
+    cb = reply(cb);
+    if (!db.unban(target(data))) return cb({ error: 'Ese usuario no existe' });
+    cb({ ok: true });
+  });
+
+  socket.on('admin:delete', (data, cb) => {
+    if (!admin(cb)) return;
+    cb = reply(cb);
+    const user = target(data);
+    if (!db.exists(user)) return cb({ error: 'Ese usuario no existe' });
+    if (user.toLowerCase() === name.toLowerCase()) return cb({ error: 'No puedes eliminar tu propia cuenta' });
+    if (db.isAdmin(user)) return cb({ error: 'No puedes eliminar a otro admin' });
+    kick(user, 'deleted');
+    db.deleteUser(user);
+    broadcastLobby();
+    cb({ ok: true });
   });
 
   socket.on('disconnect', () => {

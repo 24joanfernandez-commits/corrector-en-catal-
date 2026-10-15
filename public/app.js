@@ -24,17 +24,26 @@ function colorFor(name) {
   for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) % 360;
   return `hsl(${h} 75% 65%)`;
 }
+// Nombre con estilo de admin (morado + etiqueta) si corresponde
+const isAdminName = (name) => (App.lobby.admins || []).includes(name);
+function nameHTML(name, extra = '') {
+  return isAdminName(name)
+    ? `<span class="admin-name">${esc(name)}</span><span class="admin-badge">ADMIN</span>${extra}`
+    : `${esc(name)}${extra}`;
+}
 function avatarHTML(name, cls = '') {
+  if (isAdminName(name)) cls += ' admin-av';
   return `<span class="avatar ${cls}" style="--av:${colorFor(name)}">${esc(String(name)[0] || '?').toUpperCase()}</span>`;
 }
 
 // ---------- Vistas ----------
 function show(view) {
   App.view = view;
-  for (const v of ['auth', 'lobby', 'room', 'roulette']) $('#view-' + v).classList.toggle('hidden', v !== view);
+  for (const v of ['auth', 'lobby', 'room', 'roulette', 'admin']) $('#view-' + v).classList.toggle('hidden', v !== view);
   $('#topbar').classList.toggle('hidden', view === 'auth');
   $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.nav === view));
   if (view === 'roulette' && typeof Roulette !== 'undefined') Roulette.onShow();
+  if (view === 'admin') Admin.load();
 }
 
 function toast(msg, kind = 'error') {
@@ -162,6 +171,7 @@ $('#auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const username = $('#auth-user').value.trim();
   const password = $('#auth-pass').value;
+  const adminPassword = $('#auth-admin').value;
   if (authMode === 'register' && password !== $('#auth-pass2').value) {
     $('#auth-error').textContent = 'Las contraseñas no coinciden';
     return;
@@ -170,10 +180,15 @@ $('#auth-form').addEventListener('submit', async (e) => {
   try {
     const res = await fetch('/api/' + authMode, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, adminPassword }),
     });
     const data = await res.json();
-    if (data.error) { $('#auth-error').textContent = data.error; return; }
+    if (data.error) {
+      $('#auth-error').textContent = data.error + (data.bannedUntil ? ' hasta el ' + fmtDate(data.bannedUntil) : '');
+      return;
+    }
+    $('#auth-admin').value = '';
+    if (adminPassword) setTimeout(() => toast('Has entrado como administrador', 'ok'), 400);
     store.set('rc_token', data.token);
     if (authMode === 'register') setTimeout(() => toast('¡Bienvenido! Tienes 1.000 fichas para empezar', 'ok'), 400);
     connect(data.token);
@@ -201,24 +216,40 @@ function connect(token) {
   App.socket = socket;
 
   socket.on('connect_error', (err) => {
-    if (err.message === 'auth') {
+    if (err.message === 'auth' || err.message === 'banned') {
+      if (err.message === 'banned') $('#auth-error').textContent = 'Tu cuenta está baneada temporalmente';
       store.del('rc_token');
       socket.disconnect();
       show('auth');
     }
   });
   socket.on('connect', () => { if (App.view === 'auth') show('lobby'); });
-  socket.on('disconnect', () => toast('Conexión perdida, reconectando…'));
+  socket.on('disconnect', (reason) => { if (reason !== 'io server disconnect') toast('Conexión perdida, reconectando…'); });
+  socket.on('kicked', (k) => {
+    store.del('rc_token');
+    App.room = null;
+    show('auth');
+    $('#auth-error').textContent = k.reason === 'banned'
+      ? 'Un admin te ha baneado hasta el ' + fmtDate(k.until)
+      : 'Un admin ha eliminado tu cuenta';
+  });
 
   socket.on('me', (me) => {
     const changed = me.chips !== App.me.chips;
     App.me = me;
-    $('#my-name').textContent = me.name;
-    $('#my-avatar').outerHTML = `<span class="avatar" id="my-avatar" style="--av:${colorFor(me.name)}">${esc(me.name[0].toUpperCase())}</span>`;
+    $$('.admin-nav').forEach((b) => b.classList.toggle('hidden', !me.admin));
+    if (!me.admin && App.view === 'admin') show('lobby');
+    paintMe();
     if (!(typeof Roulette !== 'undefined' && Roulette.spinning)) setChips(me.chips, changed);
   });
 
-  socket.on('lobby', (data) => { App.lobby = data; renderLobby(); });
+  socket.on('lobby', (data) => {
+    const before = JSON.stringify(App.lobby.admins || []);
+    App.lobby = data;
+    renderLobby();
+    paintMe();
+    if (before !== JSON.stringify(data.admins || []) && App.room) renderRoom();
+  });
   socket.on('chat:history', (msgs) => { $('#global-chat').innerHTML = ''; msgs.forEach((m) => addChat('#global-chat', m)); });
   socket.on('chat:global', (m) => addChat('#global-chat', m));
   socket.on('chat:roomHistory', (msgs) => { $('#room-chat').innerHTML = ''; msgs.forEach((m) => addChat('#room-chat', m)); });
@@ -240,6 +271,14 @@ function connect(token) {
   socket.on('game:event', (ev) => {
     setTimeout(() => showResult(ev.kind, ev.amount, ev.label), ev.delay || 0);
   });
+}
+
+function paintMe() {
+  const me = App.me;
+  if (!me.name) return;
+  const admin = me.admin || isAdminName(me.name);
+  $('#my-name').innerHTML = admin ? `<span class="admin-name">${esc(me.name)}</span><span class="admin-badge">ADMIN</span>` : esc(me.name);
+  $('#my-avatar').outerHTML = `<span class="avatar${admin ? ' admin-av' : ''}" id="my-avatar" style="--av:${colorFor(me.name)}">${esc(me.name[0].toUpperCase())}</span>`;
 }
 
 function setChips(n, animate) {
@@ -278,7 +317,7 @@ function renderLobby() {
     const mine = App.room && App.room.id === r.id;
     return `<div class="room-row">
       <div class="rr-icon ${r.type}">${r.type === 'poker' ? '♠' : '21'}</div>
-      <div class="rr-info"><b>${esc(r.name)}</b><span>${r.type === 'poker' ? "Texas Hold'em" : 'Blackjack'} · Anfitrión: ${esc(r.host)}</span></div>
+      <div class="rr-info"><b>${esc(r.name)}</b><span>${r.type === 'poker' ? "Texas Hold'em" : 'Blackjack'} · Anfitrión: ${nameHTML(r.host)}</span></div>
       <div class="rr-players"><div class="bar"><i style="width:${(r.players / r.max) * 100}%"></i></div>${r.players}/${r.max}</div>
       <div class="rr-status ${r.status === 'Jugando' ? 'live' : ''}">${r.status}</div>
       <button class="btn ${mine ? 'green' : 'gold'} small" data-join="${r.id}" ${full && !mine ? 'disabled' : ''}>${mine ? 'Volver' : full ? 'Llena' : 'Unirse'}</button>
@@ -286,7 +325,7 @@ function renderLobby() {
   }).join('') : `<div class="empty">No hay mesas abiertas. ¡Crea una y avisa a tus amigos!</div>`;
 
   $('#leaderboard').innerHTML = leaderboard.map((u, i) => `<li class="${u.name === App.me.name ? 'me' : ''}">
-    <span class="rank r${i + 1}">${i + 1}</span>${avatarHTML(u.name, 'sm')}<span class="lb-name">${esc(u.name)}</span><span class="lb-chips">${fmt(u.chips)}</span></li>`).join('');
+    <span class="rank r${i + 1}">${i + 1}</span>${avatarHTML(u.name, 'sm')}<span class="lb-name">${nameHTML(u.name)}</span><span class="lb-chips">${fmt(u.chips)}</span></li>`).join('');
 }
 
 $('#room-list').addEventListener('click', (e) => {
@@ -362,7 +401,7 @@ function addChat(sel, m) {
   } else {
     div.className = 'msg' + (m.name === App.me.name ? ' mine' : '');
     const time = new Date(m.ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    div.innerHTML = `${avatarHTML(m.name, 'xs')}<div><div class="msg-head"><b style="color:${colorFor(m.name)}">${esc(m.name)}</b><time>${time}</time></div><div class="msg-text"></div></div>`;
+    div.innerHTML = `${avatarHTML(m.name, 'xs')}<div><div class="msg-head">${m.admin || isAdminName(m.name) ? `<b class="admin-name">${esc(m.name)}</b><span class="admin-badge">ADMIN</span>` : `<b style="color:${colorFor(m.name)}">${esc(m.name)}</b>`}<time>${time}</time></div><div class="msg-text"></div></div>`;
     div.querySelector('.msg-text').textContent = m.text;
   }
   box.appendChild(div);
@@ -377,6 +416,80 @@ $$('.chat-form').forEach((f) => f.addEventListener('submit', (e) => {
   App.socket.emit('chat:send', { scope: f.dataset.scope, text });
   inp.value = '';
 }));
+
+// ---------- Panel de administración ----------
+function fmtDate(ts) {
+  return new Date(ts).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+const BAN_OPTIONS = [[5, '5 min'], [30, '30 min'], [60, '1 hora'], [360, '6 horas'], [1440, '1 día'], [10080, '7 días'], [43200, '30 días']];
+const Admin = {
+  users: [],
+  timer: null,
+  load() {
+    if (!App.socket) return;
+    App.socket.emit('admin:users', (r) => {
+      if (r.error) { toast(r.error); return; }
+      this.users = r.users;
+      this.render();
+    });
+    clearInterval(this.timer);
+    this.timer = setInterval(() => { if (App.view === 'admin') this.refreshQuiet(); else clearInterval(this.timer); }, 5000);
+  },
+  refreshQuiet() {
+    // No re-renderiza si estás escribiendo en una casilla
+    if (document.activeElement && document.activeElement.closest('#admin-users')) return;
+    App.socket.emit('admin:users', (r) => { if (!r.error) { this.users = r.users; this.render(); } });
+  },
+  render() {
+    const q = $('#admin-search').value.trim().toLowerCase();
+    const list = this.users.filter((u) => u.name.toLowerCase().includes(q));
+    const online = this.users.filter((u) => u.online).length;
+    const banned = this.users.filter((u) => u.bannedUntil).length;
+    $('#admin-stats').innerHTML = `<div><b>${this.users.length}</b><span>cuentas</span></div><div><b>${online}</b><span>conectados</span></div><div><b>${banned}</b><span>baneados</span></div>`;
+    $('#admin-users').innerHTML = list.map((u) => {
+      const me = u.name === App.me.name;
+      const status = u.bannedUntil
+        ? `<span class="tag ban">Baneado hasta ${fmtDate(u.bannedUntil)}</span>`
+        : u.online ? `<span class="tag on">● Conectado${u.inRoom ? ' · en mesa' : ''}</span>` : '<span class="tag off">Desconectado</span>';
+      const protectedUser = me || u.isAdmin;
+      return `<tr data-user="${esc(u.name)}">
+        <td><div class="au">${avatarHTML(u.name, 'sm')}<b class="${u.isAdmin ? 'admin-name' : ''}">${esc(u.name)}</b>${u.isAdmin ? '<span class="admin-badge">ADMIN</span>' : ''}${me ? '<span class="tag you">tú</span>' : ''}</div></td>
+        <td>${status}</td>
+        <td><div class="chips-edit"><input type="number" min="0" value="${u.chips}" class="chips-in"><button class="btn gold small" data-act="chips">Poner</button></div></td>
+        <td>${protectedUser ? '<span class="muted">—</span>' : u.bannedUntil
+          ? '<button class="btn green small" data-act="unban">Quitar ban</button>'
+          : `<div class="ban-edit"><select class="ban-sel">${BAN_OPTIONS.map(([m, l]) => `<option value="${m}">${l}</option>`).join('')}</select><button class="btn danger small" data-act="ban">Banear</button></div>`}</td>
+        <td>${protectedUser ? '' : '<button class="btn ghost small del" data-act="delete" title="Eliminar cuenta">🗑️ Eliminar</button>'}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="5" class="muted" style="text-align:center;padding:24px">No hay usuarios</td></tr>';
+  },
+  action(btn) {
+    const tr = btn.closest('tr');
+    const user = tr.dataset.user;
+    const act = btn.dataset.act;
+    const done = (msg) => (r) => { if (r.error) toast(r.error); else { toast(msg, 'ok'); this.load(); } };
+    if (act === 'chips') {
+      const chips = Number(tr.querySelector('.chips-in').value);
+      App.socket.emit('admin:setChips', { user, chips }, done(`${user} ahora tiene ${fmt(chips)} fichas`));
+    } else if (act === 'ban') {
+      const sel = tr.querySelector('.ban-sel');
+      const label = sel.options[sel.selectedIndex].text;
+      if (!confirm(`¿Banear a ${user} durante ${label}?`)) return;
+      App.socket.emit('admin:ban', { user, minutes: +sel.value }, done(`${user} baneado durante ${label}`));
+    } else if (act === 'unban') {
+      App.socket.emit('admin:unban', { user }, done(`${user} ya no está baneado`));
+    } else if (act === 'delete') {
+      if (!confirm(`¿Eliminar la cuenta de ${user} para siempre? No se puede deshacer.`)) return;
+      App.socket.emit('admin:delete', { user }, done(`Cuenta de ${user} eliminada`));
+    }
+  },
+};
+$('#admin-users').addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (b) Admin.action(b); });
+$('#admin-users').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.classList.contains('chips-in')) Admin.action(e.target.closest('tr').querySelector('[data-act=chips]'));
+});
+$('#admin-search').addEventListener('input', () => Admin.render());
+$('#admin-refresh').addEventListener('click', () => Admin.load());
 
 // ---------- Arranque ----------
 window.addEventListener('DOMContentLoaded', () => {

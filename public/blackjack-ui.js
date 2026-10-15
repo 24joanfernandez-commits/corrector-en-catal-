@@ -23,7 +23,7 @@ const BlackjackUI = {
         <div class="bj-bet ${s.bet ? '' : 'empty'}">${s.bet ? PokerUI.chipStack(s.bet) + `<span>${fmt(s.bet)}</span>` : ''}${s.ready && g.phase === 'betting' ? '<em class="ready">✓ Listo</em>' : ''}</div>
         <div class="seat-box">
           ${avatarHTML(s.name)}
-          <div class="seat-info"><b>${esc(s.name)}</b><span class="seat-chips"><span class="chip-ico sm"></span>${fmt(s.chips)}</span></div>
+          <div class="seat-info"><b>${nameHTML(s.name)}</b><span class="seat-chips"><span class="chip-ico sm"></span>${fmt(s.chips)}</span></div>
           ${s.isTurn && g.deadline ? `<div class="timer-bar" data-deadline="${g.deadline}" data-total="${g.turnMs}"></div>` : ''}
         </div>
       </div>`;
