@@ -66,6 +66,7 @@ const PokerUI = {
         </div>
         ${seatsHTML}${betsHTML}
       </div>`;
+    fitTable();
     Cards.animate($('#table-wrap'), $('#deck'));
 
     // Controles del anfitrión

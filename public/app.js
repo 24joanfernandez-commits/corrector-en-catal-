@@ -420,6 +420,15 @@ function renderRoom() {
   else BlackjackUI.render(st);
 }
 
+// Escala asientos y cartas según el tamaño real de la mesa (pantallas pequeñas)
+function fitTable() {
+  const t = $('.poker-table, .bj-table');
+  if (!t) return;
+  const k = window.innerWidth > 1100 ? Math.max(0.55, Math.min(1, t.clientWidth / (t.classList.contains('bj-table') ? 860 : 820))) : 1;
+  t.style.setProperty('--k', k.toFixed(3));
+}
+window.addEventListener('resize', fitTable);
+
 function act(action, data = {}) {
   App.socket.emit('game:action', { action, ...data }, (r) => { if (r && r.error) toast(r.error); });
 }

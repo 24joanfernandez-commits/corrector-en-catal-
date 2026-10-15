@@ -59,6 +59,7 @@ const BlackjackUI = {
         </div>
         ${seatsHTML}
       </div>`;
+    fitTable();
     Cards.animate($('#table-wrap'), $('#deck'));
     $('#room-controls').innerHTML = '';
     this.renderActions(g);
